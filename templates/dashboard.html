@@ -1,0 +1,65 @@
+{% extends "layout.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h3><i class="fas fa-hdd"></i> Disk Usage</h3>
+
+    <div style="display: flex; gap: 2rem; align-items: center; justify-content: center; flex-wrap: wrap;">
+        <!-- Simple CSS-based visualization or standard stats -->
+        <div style="text-align: center;">
+            <div style="
+                width: 150px; 
+                height: 150px; 
+                border-radius: 50%; 
+                background: conic-gradient(
+                    var(--primary-color) {{ disk.percent }}%, 
+                    #e9ecef 0
+                );
+                display: flex; 
+                align-items: center; 
+                justify-content: center;
+                margin: 0 auto 1rem auto;
+            ">
+                <div style="
+                    width: 120px; 
+                    height: 120px; 
+                    background: white; 
+                    border-radius: 50%; 
+                    display: flex; 
+                    align-items: center; 
+                    justify-content: center;
+                    flex-direction: column;
+                ">
+                    <span style="font-size: 1.5rem; font-weight: bold;">{{ disk.percent }}%</span>
+                    <span style="color: #6c757d; font-size: 0.9rem;">Used</span>
+                </div>
+            </div>
+        </div>
+
+        <div style="min-width: 200px;">
+            <table style="width: 100%;">
+                <tr>
+                    <td><strong>Total Space:</strong></td>
+                    <td>{{ disk.total }} GB</td>
+                </tr>
+                <tr>
+                    <td><strong>Used Space:</strong></td>
+                    <td>{{ disk.used }} GB</td>
+                </tr>
+                <tr>
+                    <td><strong>Free Space:</strong></td>
+                    <td>{{ disk.free }} GB</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h3><i class="fas fa-info-circle"></i> Quick Status</h3>
+    <p>System is running normally.</p>
+    <a href="{{ url_for('files') }}" class="btn">Manage Files</a>
+</div>
+{% endblock %}

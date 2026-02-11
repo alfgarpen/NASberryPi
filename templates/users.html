@@ -1,0 +1,37 @@
+{% extends "layout.html" %}
+
+{% block title %}System Users{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h3><i class="fas fa-users"></i> Local System Users</h3>
+    <p class="text-muted">Listing users with UID >= 1000 and valid shells.</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>UID</th>
+                <th>GID</th>
+                <th>Home Directory</th>
+                <th>Shell</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td><strong>{{ user.username }}</strong></td>
+                <td>{{ user.uid }}</td>
+                <td>{{ user.gid }}</td>
+                <td>{{ user.home }}</td>
+                <td><code>{{ user.shell }}</code></td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5">No users found? (Check utils.py logic)</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

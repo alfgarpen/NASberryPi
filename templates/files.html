@@ -1,0 +1,125 @@
+{% extends "layout.html" %}
+
+{% block title %}File Manager{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="file-actions">
+        <form action="{{ url_for('file_action') }}" method="POST" enctype="multipart/form-data"
+            style="display: flex; gap: 0.5rem; align-items: center;">
+            <input type="hidden" name="action" value="upload">
+            <input type="hidden" name="current_path" value="{{ current_path }}">
+            <input type="file" name="file" required style="border: 1px solid var(--border-color); padding: 0.25rem;">
+            <button type="submit" class="btn btn-sm"><i class="fas fa-upload"></i> Upload</button>
+        </form>
+
+        <div style="width: 1px; background: #dee2e6; height: 30px; margin: 0 0.5rem;"></div>
+
+        <form action="{{ url_for('file_action') }}" method="POST" style="display: flex; gap: 0.5rem;">
+            <input type="hidden" name="action" value="create_folder">
+            <input type="hidden" name="current_path" value="{{ current_path }}">
+            <input type="text" name="folder_name" placeholder="New Folder Name" required class="form-control"
+                style="width: 150px; padding: 0.25rem;">
+            <button type="submit" class="btn btn-sm"><i class="fas fa-folder-plus"></i> Create</button>
+        </form>
+    </div>
+
+    <div class="breadcrumb">
+        <a href="{{ url_for('files') }}"><i class="fas fa-home"></i> Root</a>
+        {% if current_path %}
+        {% set parts = current_path.split('/') %}
+        {% set ns = namespace(path='') %}
+        {% for part in parts %}
+        {% set ns.path = ns.path + part + '/' %}
+        <span>/</span>
+        <a href="{{ url_for('files', req_path=ns.path.rstrip('/')) }}">{{ part }}</a>
+        {% endfor %}
+        {% endif %}
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 50px;">Type</th>
+                <th>Name</th>
+                <th style="width: 100px;">Size</th>
+                <th style="width: 150px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if parent_path is not none %}
+            <tr>
+                <td><i class="fas fa-level-up-alt file-icon dir-icon"></i></td>
+                <td><a href="{{ url_for('files', req_path=parent_path) }}">..</a></td>
+                <td>-</td>
+                <td></td>
+            </tr>
+            {% endif %}
+
+            {% for file in files %}
+            <tr>
+                <td>
+                    {% if file.is_dir %}
+                    <i class="fas fa-folder file-icon dir-icon"></i>
+                    {% else %}
+                    <i class="fas fa-file file-icon file-icon-default"></i>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if file.is_dir %}
+                    <a href="{{ url_for('files', req_path=file.path) }}">{{ file.name }}</a>
+                    {% else %}
+                    <a href="{{ url_for('files', req_path=file.path) }}" target="_blank">{{ file.name }}</a>
+                    {% endif %}
+                </td>
+                <td>{{ file.size }}</td>
+                <td>
+                    <div style="display: flex; gap: 0.25rem;">
+                        <!-- Rename Trigger (Simple implementation: Prompts user) -->
+                        <button onclick="promptRename('{{ file.name }}')" class="btn btn-sm"
+                            style="background: #17a2b8;" title="Rename">
+                            <i class="fas fa-edit"></i>
+                        </button>
+
+                        <!-- Delete Form -->
+                        <form action="{{ url_for('file_action') }}" method="POST"
+                            onsubmit="return confirm('Are you sure you want to delete {{ file.name }}?');"
+                            style="display: inline;">
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="current_path" value="{{ current_path }}">
+                            <input type="hidden" name="item_name" value="{{ file.name }}">
+                            <button type="submit" class="btn btn-sm btn-danger" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4" style="text-align: center; color: #6c757d;">Folder is empty</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Simple Hidden Form for Rename (controlled by JS) -->
+<form id="renameForm" action="{{ url_for('file_action') }}" method="POST" style="display: none;">
+    <input type="hidden" name="action" value="rename">
+    <input type="hidden" name="current_path" value="{{ current_path }}">
+    <input type="hidden" name="old_name" id="renameOldName">
+    <input type="hidden" name="new_name" id="renameNewName">
+</form>
+
+<script>
+    function promptRename(oldName) {
+        const newName = prompt("Enter new name for " + oldName + ":", oldName);
+        if (newName && newName !== oldName) {
+            document.getElementById('renameOldName').value = oldName;
+            document.getElementById('renameNewName').value = newName;
+            document.getElementById('renameForm').submit();
+        }
+    }
+</script>
+{% endblock %}
