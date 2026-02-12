@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  nasberry:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./nas_data:/app/nas_data
+    restart: unless-stopped
