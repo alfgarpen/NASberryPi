@@ -12,6 +12,9 @@ app.config.from_object(Config)
 if not os.path.exists(app.config['NAS_ROOT']):
     os.makedirs(app.config['NAS_ROOT'])
 
+from disk_manager import disk_manager
+app.register_blueprint(disk_manager, url_prefix='/')
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):

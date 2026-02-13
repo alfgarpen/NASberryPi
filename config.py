@@ -17,3 +17,7 @@ class Config:
 
     # Max upload size (e.g., 1GB)
     MAX_CONTENT_LENGTH = 1024 * 1024 * 1024
+
+    # Disk Manager Configuration
+    MOCK_HARDWARE = True  # Set to False in production on real hardware
+    SUDO_CMD = 'sudo'     # Command prefix for privileged operations

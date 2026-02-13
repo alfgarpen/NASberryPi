@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
+
 <body>
     <nav class="sidebar">
         <div class="app-title">
@@ -14,17 +16,21 @@
         </div>
         <ul class="nav-links">
             <li><a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint == 'dashboard' else '' }}">
-                <i class="fas fa-tachometer-alt"></i> Dashboard
-            </a></li>
+                    <i class="fas fa-tachometer-alt"></i> Dashboard
+                </a></li>
             <li><a href="{{ url_for('files') }}" class="{{ 'active' if request.endpoint == 'files' else '' }}">
-                <i class="fas fa-folder"></i> Files
-            </a></li>
+                    <i class="fas fa-folder"></i> Files
+                </a></li>
+            <li><a href="{{ url_for('disk_manager.index') }}"
+                    class="{{ 'active' if request.endpoint == 'disk_manager.index' else '' }}">
+                    <i class="fas fa-hdd"></i> Disk Manager
+                </a></li>
             <li><a href="{{ url_for('users') }}" class="{{ 'active' if request.endpoint == 'users' else '' }}">
-                <i class="fas fa-users"></i> Users
-            </a></li>
+                    <i class="fas fa-users"></i> Users
+                </a></li>
             <li><a href="{{ url_for('logout') }}">
-                <i class="fas fa-sign-out-alt"></i> Logout
-            </a></li>
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a></li>
         </ul>
     </nav>
 
@@ -37,14 +43,15 @@
         </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
         {% endwith %}
 
         {% block content %}{% endblock %}
     </main>
 </body>
+
 </html>
