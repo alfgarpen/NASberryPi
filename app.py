@@ -12,20 +12,32 @@ app.config.from_object(Config)
 # Initialize Database
 db.init_app(app)
 
-# Ensure NAS Root exists
-if not os.path.exists(app.config['NAS_ROOT']):
-    os.makedirs(app.config['NAS_ROOT'])
+# Create storage base if not exist
+USERS_DIR = os.path.join(app.config['NAS_ROOT'], 'users')
+SHARED_DIR = os.path.join(app.config['NAS_ROOT'], 'shared')
+
+for d in [USERS_DIR, SHARED_DIR]:
+    if not os.path.exists(d):
+        os.makedirs(d)
 
 with app.app_context():
     db.create_all()
     # Create default admin if no users exist
     if not User.query.first():
-        admin = User(username='admin')
+        admin = User(username='admin', role='admin')
         admin.set_password('admin123')
         db.session.add(admin)
         db.session.commit()
 
 from disk_manager import disk_manager
+@disk_manager.before_request
+def restrict_disk_manager():
+    if 'logged_in' not in session:
+        return redirect(url_for('login', next=request.url))
+    if session.get('role') != 'admin':
+        flash('Access denied. Administrator privileges required.', 'danger')
+        return render_template('access_denied.html'), 403
+
 app.register_blueprint(disk_manager, url_prefix='/')
 
 def login_required(f):
@@ -33,6 +45,17 @@ def login_required(f):
     def decorated_function(*args, **kwargs):
         if 'logged_in' not in session:
             return redirect(url_for('login', next=request.url))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'logged_in' not in session:
+            return redirect(url_for('login', next=request.url))
+        if session.get('role') != 'admin':
+            flash('Access denied. Administrator privileges required.', 'danger')
+            return render_template('access_denied.html'), 403
         return f(*args, **kwargs)
     return decorated_function
 
@@ -47,6 +70,7 @@ def login():
         if user and user.check_password(password):
             session['logged_in'] = True
             session['username'] = username
+            session['role'] = user.role
             flash('Login successful', 'success')
             next_url = request.args.get('next')
             return redirect(next_url or url_for('dashboard'))
@@ -64,19 +88,51 @@ def logout():
 @app.route('/')
 @login_required
 def dashboard():
+    from models import SharedAccessRequest
     disk_usage = get_disk_usage(app.config['NAS_ROOT'])
-    return render_template('dashboard.html', disk=disk_usage)
+    
+    user = User.query.filter_by(username=session['username']).first()
+    shared_req = SharedAccessRequest.query.filter_by(user_id=user.id).first()
+    
+    return render_template('dashboard.html', disk=disk_usage, shared_req=shared_req)
 
 @app.route('/files')
 @app.route('/files/<path:req_path>')
 @login_required
 def files(req_path=''):
+    username = session.get('username')
+    role = session.get('role')
+    
+    # 1. Determine user's home and allowed paths
+    user_home_rel = f"users/{username}"
+    
+    # 2. Path Validation & Restriction
+    if role != 'admin':
+        # Default to user's home if path is empty or invalid
+        if not req_path or req_path == '.':
+             return redirect(url_for('files', req_path=user_home_rel))
+        
+        # Check if accessing shared folder
+        if req_path.startswith('shared'):
+            from models import SharedAccessRequest
+            req = SharedAccessRequest.query.filter_by(user_id=User.query.filter_by(username=username).first().id, status='approved').first()
+            if not req:
+                flash('You do not have permission to access the shared folder. Request access in the dashboard.', 'warning')
+                return redirect(url_for('files', req_path=user_home_rel))
+        
+        # Check if accessing own folder or shared
+        if not (req_path.startswith(user_home_rel) or req_path.startswith('shared')):
+            flash('Access denied to this folder.', 'danger')
+            return redirect(url_for('files', req_path=user_home_rel))
+
     # Safe path handling
     abs_path = safe_join(app.config['NAS_ROOT'], req_path)
     
     if not abs_path or not os.path.exists(abs_path):
         flash('Invalid path', 'danger')
-        return redirect(url_for('files'))
+        # Redirect to safe location if invalid
+        target = user_home_rel if role != 'admin' else ''
+        return redirect(url_for('files', req_path=target))
 
     # If it's a file, serve it
     if os.path.isfile(abs_path):
@@ -91,27 +147,32 @@ def files(req_path=''):
             for entry in it:
                 is_dir = entry.is_dir()
                 size = entry.stat().st_size if not is_dir else 0
-                # Rel path for links
                 rel_path = os.path.relpath(entry.path, app.config['NAS_ROOT'])
                 
                 contents.append({
                     'name': entry.name,
                     'is_dir': is_dir,
                     'size': f"{size / (1024*1024):.2f} MB" if not is_dir else "-",
-                    'path': rel_path
+                    'path': rel_path.replace('\\', '/') # Ensure browser-friendly paths
                 })
     except PermissionError:
         flash('Permission denied accessing this directory', 'danger')
     
-    # Sort: Folders first, then files
     contents.sort(key=lambda x: (not x['is_dir'], x['name'].lower()))
     
-    # Calculate parent path for "Go Up" button
+    # Calculate parent path
     parent_path = None
     if req_path and req_path != '.':
-        parent_path = os.path.dirname(req_path.rstrip('/'))
-        if parent_path == '':
-            parent_path = None # Shows link to root /files
+        # Don't allow user to go above their allowed roots
+        if role != 'admin':
+            if req_path == user_home_rel or req_path == 'shared':
+                parent_path = None # At their "root"
+            else:
+                parent_path = os.path.dirname(req_path.rstrip('/'))
+        else:
+            parent_path = os.path.dirname(req_path.rstrip('/'))
+            if parent_path == '':
+                parent_path = None
             
     return render_template('files.html', files=contents, current_path=req_path, parent_path=parent_path)
 
@@ -124,6 +185,21 @@ def file_action():
     full_current_dir = safe_join(app.config['NAS_ROOT'], current_path)
     if not full_current_dir:
          return jsonify({'status': 'error', 'message': 'Invalid current path'}), 400
+
+    # Restriction for file actions
+    role = session.get('role')
+    username = session.get('username')
+    if role != 'admin':
+        user_home_rel = f"users/{username}"
+        if not (current_path.startswith(user_home_rel) or current_path.startswith('shared')):
+             return jsonify({'status': 'error', 'message': 'Access denied'}), 403
+        
+        if current_path.startswith('shared'):
+            from models import SharedAccessRequest
+            u = User.query.filter_by(username=username).first()
+            req = SharedAccessRequest.query.filter_by(user_id=u.id, status='approved').first()
+            if not req:
+                 return jsonify({'status': 'error', 'message': 'Access denied to shared folder'}), 403
 
     if action == 'upload':
         if 'file' not in request.files:
@@ -181,13 +257,13 @@ def file_action():
     return redirect(url_for('files', req_path=current_path))
 
 @app.route('/users')
-@login_required
+@admin_required
 def users():
     nas_users = User.query.all()
     return render_template('users.html', users=nas_users)
 
 @app.route('/user/action', methods=['POST'])
-@login_required
+@admin_required
 def user_action():
     action = request.form.get('action')
     
@@ -198,10 +274,16 @@ def user_action():
             if User.query.filter_by(username=username).first():
                 flash('User already exists', 'warning')
             else:
-                new_user = User(username=username)
+                new_user = User(username=username, role='user') # Default role
                 new_user.set_password(password)
                 db.session.add(new_user)
                 db.session.commit()
+                
+                # Create user storage directory
+                user_home = os.path.join(USERS_DIR, username)
+                if not os.path.exists(user_home):
+                    os.makedirs(user_home)
+                    
                 flash(f'User {username} created successfully', 'success')
     
     elif action == 'delete':
@@ -216,6 +298,55 @@ def user_action():
                 flash(f'User {user.username} deleted', 'success')
                 
     return redirect(url_for('users'))
+
+@app.route('/request_shared_access', methods=['POST'])
+@login_required
+def request_shared_access():
+    from models import SharedAccessRequest
+    user = User.query.filter_by(username=session['username']).first()
+    
+    # Check if a request already exists
+    existing = SharedAccessRequest.query.filter_by(user_id=user.id).first()
+    if existing:
+        if existing.status == 'approved':
+            flash('You already have access to the shared folder.', 'info')
+        elif existing.status == 'pending':
+            flash('Your request is still pending approval.', 'info')
+        else:
+            # Re-request if previously rejected
+            existing.status = 'pending'
+            db.session.commit()
+            flash('Access request resent.', 'success')
+    else:
+        new_req = SharedAccessRequest(user_id=user.id)
+        db.session.add(new_req)
+        db.session.commit()
+        flash('Access request submitted.', 'success')
+        
+    return redirect(url_for('dashboard'))
+
+@app.route('/admin/requests')
+@admin_required
+def admin_requests():
+    from models import SharedAccessRequest
+    requests = SharedAccessRequest.query.all()
+    return render_template('shared_requests.html', requests=requests)
+
+@app.route('/admin/request/<int:req_id>/<action>', methods=['POST'])
+@admin_required
+def shared_request_action(req_id, action):
+    from models import SharedAccessRequest
+    req = SharedAccessRequest.query.get_or_404(req_id)
+    
+    if action == 'approve':
+        req.status = 'approved'
+        flash(f'Access approved for {req.user.username}', 'success')
+    elif action == 'reject':
+        req.status = 'rejected'
+        flash(f'Access rejected for {req.user.username}', 'warning')
+        
+    db.session.commit()
+    return redirect(url_for('admin_requests'))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

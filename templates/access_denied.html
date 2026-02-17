@@ -1,0 +1,27 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <div class="card border-danger shadow">
+                <div class="card-body py-5">
+                    <i class="bi bi-shield-lock-fill text-danger" style="font-size: 4rem;"></i>
+                    <h1 class="display-4 mt-3">Access Denied</h1>
+                    <p class="lead text-muted">You do not have permission to access this page.</p>
+                    <hr class="my-4">
+                    <p>Administrators only. Please contact the system administrator if you believe this is an error.</p>
+                    <div class="mt-4">
+                        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-primary">
+                            <i class="bi bi-house-door"></i> Back to Dashboard
+                        </a>
+                        <a href="{{ url_for('logout') }}" class="btn btn-outline-danger ms-2">
+                            <i class="bi bi-box-arrow-right"></i> Logout
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -58,8 +58,57 @@
 </div>
 
 <div class="card">
-    <h3><i class="fas fa-info-circle"></i> Quick Status</h3>
-    <p>System is running normally.</p>
+    <h3><i class="fas fa-user-circle"></i> My Profile</h3>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <p><strong>Username:</strong> {{ session.username }}</p>
+            <p><strong>Role:</strong>
+                <span class="badge {% if session.role == 'admin' %}badge-danger{% else %}badge-info{% endif %}">{{
+                    session.role }}</span>
+            </p>
+        </div>
+
+        {% if session.role != 'admin' %}
+        <div style="border-left: 2px solid #eee; padding-left: 20px;">
+            <h5>Shared Folder Access</h5>
+            {% if shared_req %}
+            <p>Status:
+                <span
+                    class="badge {% if shared_req.status == 'approved' %}bg-success{% elif shared_req.status == 'pending' %}bg-warning{% else %}bg-danger{% endif %} text-uppercase">
+                    {{ shared_req.status }}
+                </span>
+            </p>
+            {% if shared_req.status == 'approved' %}
+            <a href="{{ url_for('files', req_path='shared') }}" class="btn btn-sm">Visit Shared Folder</a>
+            {% elif shared_req.status == 'rejected' %}
+            <form action="{{ url_for('request_shared_access') }}" method="POST">
+                <button type="submit" class="btn btn-sm btn-warning">Request Access Again</button>
+            </form>
+            {% endif %}
+            {% else %}
+            <p class="text-muted small">No access yet.</p>
+            <form action="{{ url_for('request_shared_access') }}" method="POST">
+                <button type="submit" class="btn btn-sm">Request Shared Access</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <h3><i class="fas fa-folder-open"></i> File Manager</h3>
+    <p>Access your personal files or shared folders.</p>
     <a href="{{ url_for('files') }}" class="btn">Manage Files</a>
 </div>
+{% if session.role == 'admin' %}
+<div class="card" style="border-left: 5px solid var(--danger-color);">
+    <h3><i class="fas fa-shield-alt"></i> Administration</h3>
+    <p>Manage users, disks, and access requests.</p>
+    <div style="display: flex; gap: 10px;">
+        <a href="{{ url_for('users') }}" class="btn">Manage Users</a>
+        <a href="{{ url_for('admin_requests') }}" class="btn">Manage Requests</a>
+    </div>
+</div>
+{% endif %}
 {% endblock %}

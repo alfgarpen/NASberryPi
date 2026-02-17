@@ -11,13 +11,12 @@
         </button>
     </div>
 
-    <p class="text-muted">These users are independent from the system host.</p>
-
     <table>
         <thead>
             <tr>
                 <th>ID</th>
                 <th>Username</th>
+                <th>Role</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -26,6 +25,11 @@
             <tr>
                 <td>{{ user.id }}</td>
                 <td><strong>{{ user.username }}</strong></td>
+                <td>
+                    <span class="badge {% if user.role == 'admin' %}badge-danger{% else %}badge-info{% endif %}">
+                        {{ user.role }}
+                    </span>
+                </td>
                 <td>
                     {% if user.username != session.username %}
                     <form action="{{ url_for('user_action') }}" method="POST" style="display:inline;">

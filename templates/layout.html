@@ -21,6 +21,7 @@
             <li><a href="{{ url_for('files') }}" class="{{ 'active' if request.endpoint == 'files' else '' }}">
                     <i class="fas fa-folder"></i> Files
                 </a></li>
+            {% if session.get('role') == 'admin' %}
             <li><a href="{{ url_for('disk_manager.index') }}"
                     class="{{ 'active' if request.endpoint == 'disk_manager.index' else '' }}">
                     <i class="fas fa-hdd"></i> Disk Manager
@@ -28,6 +29,11 @@
             <li><a href="{{ url_for('users') }}" class="{{ 'active' if request.endpoint == 'users' else '' }}">
                     <i class="fas fa-users"></i> Users
                 </a></li>
+            <li><a href="{{ url_for('admin_requests') }}"
+                    class="{{ 'active' if request.endpoint == 'admin_requests' else '' }}">
+                    <i class="fas fa-envelope-open-text"></i> Shared Requests
+                </a></li>
+            {% endif %}
             <li><a href="{{ url_for('logout') }}">
                     <i class="fas fa-sign-out-alt"></i> Logout
                 </a></li>
