@@ -1,37 +1,75 @@
 {% extends "layout.html" %}
 
-{% block title %}System Users{% endblock %}
+{% block title %}NAS Users{% endblock %}
 
 {% block content %}
 <div class="card">
-    <h3><i class="fas fa-users"></i> Local System Users</h3>
-    <p class="text-muted">Listing users with UID >= 1000 and valid shells.</p>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h3><i class="fas fa-users"></i> NAS Users Management</h3>
+        <button onclick="document.getElementById('createUserModal').style.display='block'" class="btn btn-success">
+            <i class="fas fa-user-plus"></i> New User
+        </button>
+    </div>
+
+    <p class="text-muted">These users are independent from the system host.</p>
 
     <table>
         <thead>
             <tr>
+                <th>ID</th>
                 <th>Username</th>
-                <th>UID</th>
-                <th>GID</th>
-                <th>Home Directory</th>
-                <th>Shell</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for user in users %}
             <tr>
+                <td>{{ user.id }}</td>
                 <td><strong>{{ user.username }}</strong></td>
-                <td>{{ user.uid }}</td>
-                <td>{{ user.gid }}</td>
-                <td>{{ user.home }}</td>
-                <td><code>{{ user.shell }}</code></td>
+                <td>
+                    {% if user.username != session.username %}
+                    <form action="{{ url_for('user_action') }}" method="POST" style="display:inline;">
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="user_id" value="{{ user.id }}">
+                        <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure?')">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    </form>
+                    {% else %}
+                    <span class="badge badge-info text-dark">Current User</span>
+                    {% endif %}
+                </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="5">No users found? (Check utils.py logic)</td>
+                <td colspan="3">No users found.</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+</div>
+
+<!-- Simple Modal for Create User -->
+<div id="createUserModal"
+    style="display:none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);">
+    <div class="card" style="width: 400px; margin: 100px auto; padding: 20px;">
+        <h3>Create New NAS User</h3>
+        <form action="{{ url_for('user_action') }}" method="POST">
+            <input type="hidden" name="action" value="create">
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" name="username" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" class="form-control" required>
+            </div>
+            <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" onclick="document.getElementById('createUserModal').style.display='none'"
+                    class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create User</button>
+            </div>
+        </form>
+    </div>
 </div>
 {% endblock %}
