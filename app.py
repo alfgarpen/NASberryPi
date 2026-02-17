@@ -3,14 +3,27 @@ import shutil
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory, jsonify
 from config import Config
-from utils import get_disk_usage, get_system_users, safe_join
+from utils import get_disk_usage, safe_join
+from models import db, User
 
 app = Flask(__name__)
 app.config.from_object(Config)
 
+# Initialize Database
+db.init_app(app)
+
 # Ensure NAS Root exists
 if not os.path.exists(app.config['NAS_ROOT']):
     os.makedirs(app.config['NAS_ROOT'])
+
+with app.app_context():
+    db.create_all()
+    # Create default admin if no users exist
+    if not User.query.first():
+        admin = User(username='admin')
+        admin.set_password('admin123')
+        db.session.add(admin)
+        db.session.commit()
 
 from disk_manager import disk_manager
 app.register_blueprint(disk_manager, url_prefix='/')
@@ -29,11 +42,9 @@ def login():
         username = request.form.get('username')
         password = request.form.get('password')
         
-        # Simple dictionary lookup for demo purposes
-        # In real app: Use database & hashed passwords
-        user_password = app.config['USERS'].get(username)
+        user = User.query.filter_by(username=username).first()
         
-        if user_password and user_password == password:
+        if user and user.check_password(password):
             session['logged_in'] = True
             session['username'] = username
             flash('Login successful', 'success')
@@ -172,8 +183,39 @@ def file_action():
 @app.route('/users')
 @login_required
 def users():
-    system_users = get_system_users()
-    return render_template('users.html', users=system_users)
+    nas_users = User.query.all()
+    return render_template('users.html', users=nas_users)
+
+@app.route('/user/action', methods=['POST'])
+@login_required
+def user_action():
+    action = request.form.get('action')
+    
+    if action == 'create':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        if username and password:
+            if User.query.filter_by(username=username).first():
+                flash('User already exists', 'warning')
+            else:
+                new_user = User(username=username)
+                new_user.set_password(password)
+                db.session.add(new_user)
+                db.session.commit()
+                flash(f'User {username} created successfully', 'success')
+    
+    elif action == 'delete':
+        user_id = request.form.get('user_id')
+        user = User.query.get(user_id)
+        if user:
+            if user.username == session.get('username'):
+                flash('Cannot delete yourself!', 'danger')
+            else:
+                db.session.delete(user)
+                db.session.commit()
+                flash(f'User {user.username} deleted', 'success')
+                
+    return redirect(url_for('users'))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

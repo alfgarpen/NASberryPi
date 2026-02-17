@@ -9,11 +9,11 @@ class Config:
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
     NAS_ROOT = os.environ.get('NAS_ROOT') or os.path.join(BASE_DIR, 'nas_data')
     
-    # Simple User Dictionary for Authentication (Username: Password)
-    # In a production environment, use hashed passwords and a database.
-    USERS = {
-        "admin": "admin123"
-    }
+    # Database Configuration
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(BASE_DIR, 'nas_users.db')
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # Max upload size (e.g., 1GB)
 
     # Max upload size (e.g., 1GB)
     MAX_CONTENT_LENGTH = 1024 * 1024 * 1024
