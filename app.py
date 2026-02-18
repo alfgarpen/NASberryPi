@@ -6,9 +6,10 @@ from flask import (Flask, render_template, request, redirect,
 from config import Config
 from utils import get_disk_usage, safe_join
 from models import db, User
-from services.access_control import (get_user_root, get_user_root_rel,
+from services.access_control import (get_user_root, get_user_root_rel, get_user_home_rel,
                                      check_shared_access, ensure_path_allowed)
 from services.user_service import reset_user_password, change_user_role
+from services.initialization import ensure_storage_structure
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -16,13 +17,9 @@ app.config.from_object(Config)
 # Initialize Database
 db.init_app(app)
 
-# Create storage directories if they don't exist
+# Created storage directories if they don't exist
+# Handled in services.initialization.ensure_storage_structure
 USERS_DIR = os.path.join(app.config['NAS_ROOT'], 'users')
-SHARED_DIR = os.path.join(app.config['NAS_ROOT'], 'shared')
-
-for d in [USERS_DIR, SHARED_DIR]:
-    if not os.path.exists(d):
-        os.makedirs(d)
 
 with app.app_context():
     db.create_all()
@@ -32,6 +29,9 @@ with app.app_context():
         admin.set_password('admin123')
         db.session.add(admin)
         db.session.commit()
+    
+    # Ensure storage consistency (idempotent)
+    ensure_storage_structure(app)
 
 from disk_manager import disk_manager
 
@@ -181,6 +181,7 @@ def files(req_path=''):
         return err
     nas_root = app.config['NAS_ROOT']
     user_root_rel = get_user_root_rel(user)
+    user_home_rel = get_user_home_rel(user)
 
     # Default path handling
     if not req_path or req_path == '.':
@@ -254,6 +255,7 @@ def files(req_path=''):
         current_path=req_path,
         parent_path=parent_path,
         user_root_rel=user_root_rel,
+        user_home_rel=user_home_rel,
         shared_access=shared_access,
     )
 
@@ -370,7 +372,7 @@ def user_action():
 
     elif action == 'delete':
         user_id = request.form.get('user_id')
-        user = User.query.get(user_id)
+        user = User.query.get(int(user_id)) if user_id and user_id.isdigit() else None
         if user:
             if user.username == session.get('username'):
                 flash('You cannot delete your own account.', 'danger')
@@ -378,21 +380,25 @@ def user_action():
                 db.session.delete(user)
                 db.session.commit()
                 flash(f'User "{user.username}" deleted.', 'success')
+        else:
+            flash('Error: User not found.', 'danger')
 
     elif action == 'change_role':
         user_id = request.form.get('user_id')
         new_role = request.form.get('new_role')
-        user = User.query.get(user_id)
+        user = User.query.get(int(user_id)) if user_id and user_id.isdigit() else None
         if user:
             try:
                 change_user_role(user, new_role, session.get('username'), db.session)
                 flash(f'Role for "{user.username}" changed to "{new_role}".', 'success')
             except ValueError as e:
                 flash(str(e), 'danger')
+        else:
+            flash('Error: User not found.', 'danger')
 
     elif action == 'reset_password':
         user_id = request.form.get('user_id')
-        user = User.query.get(user_id)
+        user = User.query.get(int(user_id)) if user_id and user_id.isdigit() else None
         if user:
             temp_pw = reset_user_password(user, db.session)
             flash(
@@ -400,6 +406,8 @@ def user_action():
                 f'Temporary password (shown once): <strong>{temp_pw}</strong>',
                 'warning'
             )
+        else:
+            flash('Error: User not found.', 'danger')
 
     return redirect(url_for('users'))
 

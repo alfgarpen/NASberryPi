@@ -31,6 +31,14 @@ def get_user_root_rel(user):
     return f'users/{user.username}'
 
 
+def get_user_home_rel(user):
+    """
+    Returns the relative path (from NAS_ROOT) of the user's personal home folder.
+    - Always: 'users/<username>'
+    """
+    return f'users/{user.username}'
+
+
 def check_shared_access(user):
     """
     Returns the SharedAccessRequest for a user, or None if no request exists.
@@ -73,7 +81,7 @@ def ensure_path_allowed(user, req_path, nas_root):
     if user.role == 'admin':
         return True, None
 
-    user_home_rel = f'users/{user.username}'
+    user_home_rel = get_user_home_rel(user)
 
     # Allow user's own home
     if req_path == user_home_rel or req_path.startswith(user_home_rel + '/'):

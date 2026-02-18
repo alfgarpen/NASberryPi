@@ -11,10 +11,10 @@
         </span>
 
         {# My Files button #}
-        {% set my_files_style = '' if current_path.startswith(user_root_rel) else 'background:#e9ecef; color:#495057;'
+        {% set my_files_style = '' if current_path.startswith(user_home_rel) else 'background:#e9ecef; color:#495057;'
         %}
-        <a href="{{ url_for('files', req_path=user_root_rel) }}"
-            class="btn btn-sm {% if current_path.startswith(user_root_rel) %}btn-primary{% endif %}"
+        <a href="{{ url_for('files', req_path=user_home_rel) }}"
+            class="btn btn-sm {% if current_path.startswith(user_home_rel) %}btn-primary{% endif %}"
             style="{{ my_files_style }}">
             <i class="fas fa-home"></i> My Files
         </a>
