@@ -1,5 +1,5 @@
 {% extends "layout.html" %}
-
+{% block title %}Shared Requests{% endblock %}
 {% block content %}
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -23,7 +23,7 @@
                     <tbody>
                         {% for req in requests %}
                         <tr>
-                            <td>{{ req.user.username }}</td>
+                            <td>{{ req.user.username if req.user else 'Deleted User' }}</td>
                             <td>
                                 <span
                                     class="badge {% if req.status == 'approved' %}bg-success{% elif req.status == 'pending' %}bg-warning{% else %}bg-danger{% endif %} text-uppercase">
