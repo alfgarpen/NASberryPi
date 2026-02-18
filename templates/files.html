@@ -1,8 +1,60 @@
 {% extends "layout.html" %}
-
 {% block title %}File Manager{% endblock %}
 
 {% block content %}
+
+{# ── Top Navigation: My Files / Shared Folder ── #}
+<div class="card" style="padding: 0.75rem 1.25rem; margin-bottom: 1rem;">
+    <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+        <span style="font-weight: 600; color: #495057; margin-right: 0.5rem;">
+            <i class="fas fa-compass"></i> Navigate:
+        </span>
+
+        {# My Files button #}
+        {% set my_files_style = '' if current_path.startswith(user_root_rel) else 'background:#e9ecef; color:#495057;'
+        %}
+        <a href="{{ url_for('files', req_path=user_root_rel) }}"
+            class="btn btn-sm {% if current_path.startswith(user_root_rel) %}btn-primary{% endif %}"
+            style="{{ my_files_style }}">
+            <i class="fas fa-home"></i> My Files
+        </a>
+
+        {# Shared Folder button – behaviour depends on access status #}
+        {% if shared_access and shared_access.status == 'approved' %}
+        {% set shared_style = '' if current_path.startswith('shared') else 'background:#e9ecef; color:#495057;' %}
+        <a href="{{ url_for('files', req_path='shared') }}"
+            class="btn btn-sm {% if current_path.startswith('shared') %}btn-success{% endif %}"
+            style="{{ shared_style }}">
+            <i class="fas fa-folder-open"></i> Shared Folder
+        </a>
+        {% elif shared_access and shared_access.status == 'pending' %}
+        <span class="btn btn-sm" style="background:#fff3cd; color:#856404; cursor:default;"
+            title="Your access request is pending admin approval.">
+            <i class="fas fa-clock"></i> Shared Folder
+            <span class="badge"
+                style="background:#856404; color:white; font-size:0.7rem; margin-left:4px;">Pending</span>
+        </span>
+        {% elif shared_access and shared_access.status == 'rejected' %}
+        <span class="btn btn-sm" style="background:#f8d7da; color:#721c24; cursor:default;"
+            title="Your access request was rejected.">
+            <i class="fas fa-ban"></i> Shared Folder
+            <span class="badge"
+                style="background:#721c24; color:white; font-size:0.7rem; margin-left:4px;">Denied</span>
+        </span>
+        {% elif session.get('role') != 'admin' %}
+        <form action="{{ url_for('request_shared_access') }}" method="POST" style="display:inline;">
+            <button type="submit" class="btn btn-sm" style="background:#e9ecef; color:#495057;"
+                title="Request access to the shared folder">
+                <i class="fas fa-folder-plus"></i> Shared Folder
+                <span class="badge"
+                    style="background:#6c757d; color:white; font-size:0.7rem; margin-left:4px;">Request</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+{# ── File Actions Bar ── #}
 <div class="card">
     <div class="file-actions">
         <form action="{{ url_for('file_action') }}" method="POST" enctype="multipart/form-data"
@@ -24,8 +76,9 @@
         </form>
     </div>
 
+    {# ── Breadcrumb ── #}
     <div class="breadcrumb">
-        <a href="{{ url_for('files') }}"><i class="fas fa-home"></i> Root</a>
+        <a href="{{ url_for('files', req_path=user_root_rel) }}"><i class="fas fa-home"></i> Root</a>
         {% if current_path %}
         {% set parts = current_path.split('/') %}
         {% set ns = namespace(path='') %}
@@ -37,6 +90,7 @@
         {% endif %}
     </div>
 
+    {# ── File Table ── #}
     <table>
         <thead>
             <tr>
@@ -75,16 +129,12 @@
                 <td>{{ file.size }}</td>
                 <td>
                     <div style="display: flex; gap: 0.25rem;">
-                        <!-- Rename Trigger (Simple implementation: Prompts user) -->
                         <button onclick="promptRename('{{ file.name }}')" class="btn btn-sm"
                             style="background: #17a2b8;" title="Rename">
                             <i class="fas fa-edit"></i>
                         </button>
-
-                        <!-- Delete Form -->
                         <form action="{{ url_for('file_action') }}" method="POST"
-                            onsubmit="return confirm('Are you sure you want to delete {{ file.name }}?');"
-                            style="display: inline;">
+                            onsubmit="return confirm('Delete {{ file.name }}?');" style="display: inline;">
                             <input type="hidden" name="action" value="delete">
                             <input type="hidden" name="current_path" value="{{ current_path }}">
                             <input type="hidden" name="item_name" value="{{ file.name }}">
@@ -104,7 +154,7 @@
     </table>
 </div>
 
-<!-- Simple Hidden Form for Rename (controlled by JS) -->
+{# Hidden rename form #}
 <form id="renameForm" action="{{ url_for('file_action') }}" method="POST" style="display: none;">
     <input type="hidden" name="action" value="rename">
     <input type="hidden" name="current_path" value="{{ current_path }}">
