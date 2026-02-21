@@ -46,7 +46,12 @@ function renderDisks(disks) {
 
         // Header
         const header = document.createElement('div');
-        header.innerHTML = `<strong>${disk.path}</strong> - ${disk.model} (${formatBytes(disk.size)})`;
+        // Extra info badges
+        let tags = [];
+        if (disk.is_system_disk) tags.push('<span class="badge badge-warning" style="background:#ffc107; color:#000; padding:2px 6px; border-radius:4px; font-size:0.8rem; margin-left:10px;">System</span>');
+        if (disk.is_removable) tags.push('<span class="badge badge-info" style="background:#17a2b8; color:#fff; padding:2px 6px; border-radius:4px; font-size:0.8rem; margin-left:10px;">Removable</span>');
+
+        header.innerHTML = `<strong>${disk.name}</strong> - ${formatBytes(disk.size_bytes)} ${tags.join('')}`;
         diskDiv.appendChild(header);
 
         // Partition Bar
@@ -61,54 +66,50 @@ function renderDisks(disks) {
         let currentOffset = 0;
 
         // Render existing partitions
-        disk.partitions.forEach(part => {
-            // Calculate gap since last partition (Unallocated)
-            // Note: In mock, we don't have start/end sectors, so we just assume packed. 
-            // In real app, we'd use part.start_sector.
+        if (disk.partitions && disk.partitions.length > 0) {
+            disk.partitions.forEach(part => {
+                const widthPercent = (part.size_bytes / disk.size_bytes) * 100;
+                currentOffset += part.size_bytes;
 
-            const widthPercent = (part.size / disk.size) * 100;
-            currentOffset += part.size;
+                const partDiv = document.createElement('div');
+                partDiv.style.width = Math.max(widthPercent, 1) + '%'; // Ensure at least 1% so it's visible
+                partDiv.style.height = '100%';
+                partDiv.style.backgroundColor = getFsColor(part.filesystem);
+                partDiv.style.borderRight = '1px solid white';
+                partDiv.style.display = 'flex';
+                partDiv.style.flexDirection = 'column';
+                partDiv.style.justifyContent = 'center';
+                partDiv.style.alignItems = 'center';
+                partDiv.style.fontSize = '0.8rem';
+                partDiv.style.overflow = 'hidden';
+                partDiv.style.cursor = 'default'; // Read-only
 
-            const partDiv = document.createElement('div');
-            partDiv.style.width = `${widthPercent}%`;
-            partDiv.style.height = '100%';
-            partDiv.style.backgroundColor = getFsColor(part.fs_type);
-            partDiv.style.borderRight = '1px solid white';
-            partDiv.style.display = 'flex';
-            partDiv.style.flexDirection = 'column';
-            partDiv.style.justifyContent = 'center';
-            partDiv.style.alignItems = 'center';
-            partDiv.style.fontSize = '0.8rem';
-            partDiv.style.overflow = 'hidden';
-            partDiv.style.cursor = 'pointer';
-            partDiv.title = `${part.path} (${part.fs_type})`;
+                let title = `${part.name} (${part.filesystem})`;
+                if (part.mount_point) title += ` Mounted at: ${part.mount_point}`;
+                partDiv.title = title;
 
-            partDiv.innerHTML = `<span>${part.name}</span><span>${formatBytes(part.size)}</span>`;
-
-            // Actions Menu (Simple click handler for now)
-            partDiv.onclick = () => showPartitionActions(part);
-
-            barContainer.appendChild(partDiv);
-        });
+                partDiv.innerHTML = `<span>${part.name}</span><span>${formatBytes(part.size_bytes)}</span>`;
+                barContainer.appendChild(partDiv);
+            });
+        }
 
         // Remaining Unallocated
-        if (currentOffset < disk.size) {
-            const remaining = disk.size - currentOffset;
-            const widthPercent = (remaining / disk.size) * 100;
+        if (currentOffset < disk.size_bytes && disk.size_bytes > 0) {
+            const remaining = disk.size_bytes - currentOffset;
+            const widthPercent = (remaining / disk.size_bytes) * 100;
 
-            const unallocDiv = document.createElement('div');
-            unallocDiv.style.width = `${widthPercent}%`;
-            unallocDiv.style.height = '100%';
-            unallocDiv.style.backgroundColor = '#ccc';
-            unallocDiv.style.display = 'flex';
-            unallocDiv.style.justifyContent = 'center';
-            unallocDiv.style.alignItems = 'center';
-            unallocDiv.style.cursor = 'pointer';
-            unallocDiv.innerHTML = '<small>Unallocated</small>';
-
-            unallocDiv.onclick = () => openCreatePartitionModal(disk.path, remaining);
-
-            barContainer.appendChild(unallocDiv);
+            if (widthPercent > 1) { // Only show if it's a meaningful gap
+                const unallocDiv = document.createElement('div');
+                unallocDiv.style.width = `${widthPercent}%`;
+                unallocDiv.style.height = '100%';
+                unallocDiv.style.backgroundColor = '#ccc';
+                unallocDiv.style.display = 'flex';
+                unallocDiv.style.justifyContent = 'center';
+                unallocDiv.style.alignItems = 'center';
+                unallocDiv.style.cursor = 'default'; // Read-only
+                unallocDiv.innerHTML = '<small>Unallocated</small>';
+                barContainer.appendChild(unallocDiv);
+            }
         }
 
         diskDiv.appendChild(barContainer);
@@ -117,11 +118,12 @@ function renderDisks(disks) {
 }
 
 function getFsColor(fs) {
-    if (!fs) return '#6c757d'; // gray
+    if (!fs || fs === 'Unknown') return '#6c757d'; // gray
     switch (fs.toLowerCase()) {
         case 'ext4': return '#007bff'; // blue
         case 'ntfs': return '#17a2b8'; // cyan
         case 'fat32': return '#28a745'; // green
+        case 'vfat': return '#28a745';
         case 'swap': return '#fd7e14'; // orange
         default: return '#6610f2'; // purple
     }
@@ -129,202 +131,34 @@ function getFsColor(fs) {
 
 function renderRaids(raids) {
     const container = document.getElementById('raid-list');
-    container.innerHTML = '';
-
-    if (raids.length === 0) {
-        container.innerHTML = '<p>No RAID arrays configured.</p>';
-        return;
-    }
-
-    // Sort raids by path for consistent ordering
-    raids.sort((a, b) => a.path.localeCompare(b.path));
-
-    raids.forEach(raid => {
-        const item = document.createElement('div');
-        item.className = 'raid-item';
-        item.style.borderLeft = '4px solid #007bff';
-        item.style.padding = '10px';
-        item.style.marginBottom = '10px';
-        item.style.backgroundColor = '#f8f9fa';
-
-        item.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <strong>${raid.path}</strong> - Level: RAID ${raid.level}, Size: ${formatBytes(raid.size)}, State: ${raid.state}
-                    <br>
-                    <small>Members: ${raid.devices.join(', ')}</small>
-                </div>
-                <!-- Delete Button -->
-                <!-- Ideally confirm before delete -->
-            </div>
-        `;
-        container.appendChild(item);
-    });
+    container.innerHTML = '<p>RAID management is read-only and currently disabled in this deployment.</p>';
 }
-
 
 function updateRaidCandidateList(disks) {
     const container = document.getElementById('cr-devices');
-    container.innerHTML = '';
-
-    disks.forEach(disk => {
-        disk.partitions.forEach(part => {
-            // In a real app we'd filter out mounted or busy partitions
-            const div = document.createElement('div');
-            div.innerHTML = `
-                <label>
-                    <input type="checkbox" name="raid-device" value="${part.path}">
-                    ${part.path} (${formatBytes(part.size)}) - ${disk.model}
-                </label>
-             `;
-            container.appendChild(div);
-        });
-    });
+    container.innerHTML = '<p>RAID creation is disabled.</p>';
 }
-
-// Modal Actions
 
 function closeModal(id) {
     document.getElementById(id).style.display = 'none';
 }
 
-function openCreatePartitionModal(diskPath, maxBytes) {
-    document.getElementById('cp-disk-path').value = diskPath;
-    document.getElementById('cp-size').max = Math.floor(maxBytes / (1024 * 1024));
-    document.getElementById('cp-size').value = Math.floor(maxBytes / (1024 * 1024));
-    document.getElementById('modal-create-part').style.display = 'block';
-}
-
-function showPartitionActions(part) {
-    // For simplicity, reuse the format modal or create a specific small menu
-    // Here we'll just open the Format/Delete option via a simple confirm for now or custom UI?
-    // Let's use the Format modal for Format, and a confirm for Delete.
-    // Ideally we need a context menu.
-    // For MVP: Prompt user choice.
-
-    if (confirm(`Do you want to FORMAT or DELETE ${part.path}?\nOk = Format\nCancel = Delete`)) {
-        // Format
-        document.getElementById('fp-path').value = part.path;
-        document.getElementById('fp-name').textContent = part.path;
-        document.getElementById('modal-format-part').style.display = 'block';
-    } else {
-        // Delete (Check if they actually cancelled or clicked cancel button... tricky with confirm)
-        // Better: Use a simple custom UI or just separate buttons in the partition bar?
-        // Let's rely on a separate button or click behavior.
-        // Re-implementing:
-        const action = prompt("Type 'format' to format, 'delete' to delete:");
-        if (action === 'format') {
-            document.getElementById('fp-path').value = part.path;
-            document.getElementById('fp-name').textContent = part.path;
-            document.getElementById('modal-format-part').style.display = 'block';
-        } else if (action === 'delete') {
-            if (confirm(`Are you SURE you want to delete ${part.path}? Data will be lost.`)) {
-                deletePartition(part.path);
-            }
-        }
-    }
-}
-
 function openCreateRaidModal() {
-    document.getElementById('modal-create-raid').style.display = 'block';
+    alert("RAID creation is disabled in read-only mode.");
 }
 
-// API Calls
-
+// Dummy handler to prevent errors if elements remain
 function handleCreatePartition(e) {
     e.preventDefault();
-    const diskPath = document.getElementById('cp-disk-path').value;
-    const sizeMb = document.getElementById('cp-size').value;
-    const fs = document.getElementById('cp-fs').value;
-
-    fetch('/api/partition/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            disk_path: diskPath,
-            size_mb: sizeMb,
-            fs_type: fs
-        })
-    })
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === 'success') {
-                closeModal('modal-create-part');
-                loadDisks();
-            } else {
-                alert('Error: ' + data.message);
-            }
-        });
+    alert("Disabled");
 }
 
 function handleFormatPartition(e) {
     e.preventDefault();
-    const partPath = document.getElementById('fp-path').value;
-    const fs = document.getElementById('fp-fs').value;
-
-    fetch('/api/partition/format', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            part_path: partPath,
-            fs_type: fs
-        })
-    })
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === 'success') {
-                closeModal('modal-format-part');
-                loadDisks();
-            } else {
-                alert('Error: ' + data.message);
-            }
-        });
-}
-
-function deletePartition(partPath) {
-    fetch('/api/partition/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            part_path: partPath
-        })
-    })
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === 'success') {
-                loadDisks();
-            } else {
-                alert('Error: ' + data.message);
-            }
-        });
+    alert("Disabled");
 }
 
 function handleCreateRaid(e) {
     e.preventDefault();
-    const level = document.getElementById('cr-level').value;
-    const checkboxes = document.querySelectorAll('input[name="raid-device"]:checked');
-    const devices = Array.from(checkboxes).map(cb => cb.value);
-
-    if (devices.length < 1) {
-        alert("Please select at least one partition.");
-        return;
-    }
-
-    fetch('/api/raid/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            level: level,
-            devices: devices
-        })
-    })
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === 'success') {
-                closeModal('modal-create-raid');
-                loadDisks();
-            } else {
-                alert('Error: ' + data.message);
-            }
-        });
+    alert("Disabled");
 }

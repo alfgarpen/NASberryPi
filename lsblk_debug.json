@@ -1,0 +1,65 @@
+{
+   "blockdevices": [
+      {
+         "name": "loop0",
+         "size": 844101632,
+         "fstype": null,
+         "mountpoint": null,
+         "type": "loop",
+         "rm": false,
+         "rota": true,
+         "model": null,
+         "serial": null
+      },{
+         "name": "loop1",
+         "size": 759670784,
+         "fstype": null,
+         "mountpoint": null,
+         "type": "loop",
+         "rm": false,
+         "rota": true,
+         "model": null,
+         "serial": null
+      },{
+         "name": "sda",
+         "size": 407298048,
+         "fstype": null,
+         "mountpoint": null,
+         "type": "disk",
+         "rm": false,
+         "rota": true,
+         "model": "Virtual Disk    ",
+         "serial": null
+      },{
+         "name": "sdb",
+         "size": 6442455040,
+         "fstype": null,
+         "mountpoint": "[SWAP]",
+         "type": "disk",
+         "rm": false,
+         "rota": true,
+         "model": "Virtual Disk    ",
+         "serial": null
+      },{
+         "name": "sdc",
+         "size": 1099511627776,
+         "fstype": null,
+         "mountpoint": "/etc/hosts",
+         "type": "disk",
+         "rm": false,
+         "rota": true,
+         "model": "Virtual Disk    ",
+         "serial": null
+      },{
+         "name": "sdd",
+         "size": 158334976,
+         "fstype": null,
+         "mountpoint": null,
+         "type": "disk",
+         "rm": false,
+         "rota": true,
+         "model": "Virtual Disk    ",
+         "serial": null
+      }
+   ]
+}

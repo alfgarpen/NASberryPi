@@ -7,4 +7,8 @@ services:
       - "5000:5000"
     volumes:
       - ./nas_data:/app/nas_data
+      - /dev:/dev:ro
+      - /sys:/sys:ro
+      - /run/udev:/run/udev:ro
+    privileged: true
     restart: unless-stopped
