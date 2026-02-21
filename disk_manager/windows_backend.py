@@ -108,7 +108,7 @@ def parse_windows_disks() -> List[DiskInfo]:
             if isinstance(letter, int) and letter > 0:
                  letter = chr(letter)
             
-            p_size = p.get("Size", 0)
+            p_size = int(p.get("Size", 0))
             
             p_name = f"Partition {p.get('PartitionNumber', '?')}"
             fs_type = "Unknown"
@@ -129,7 +129,9 @@ def parse_windows_disks() -> List[DiskInfo]:
                 
                 if not overall_fs:
                     overall_fs = fs_type
-                    
+            
+            # Appending all partitions even those without drive letters 
+            # (e.g., Hidden EFI System Partitions, Recovery Partitions)
             part_info = PartitionInfo(
                 name=p_name,
                 size_bytes=p_size,

@@ -98,7 +98,9 @@ function renderDisks(disks) {
             const remaining = disk.size_bytes - currentOffset;
             const widthPercent = (remaining / disk.size_bytes) * 100;
 
-            if (widthPercent > 1) { // Only show if it's a meaningful gap
+            // Only show unallocated block if it is larger than 50MB
+            // Windows reserves small sectors for alignment / EFI / metadata
+            if (remaining > (50 * 1024 * 1024)) {
                 const unallocDiv = document.createElement('div');
                 unallocDiv.style.width = `${widthPercent}%`;
                 unallocDiv.style.height = '100%';
@@ -107,7 +109,7 @@ function renderDisks(disks) {
                 unallocDiv.style.justifyContent = 'center';
                 unallocDiv.style.alignItems = 'center';
                 unallocDiv.style.cursor = 'default'; // Read-only
-                unallocDiv.innerHTML = '<small>Unallocated</small>';
+                unallocDiv.innerHTML = `<small>Free (${formatBytes(remaining)})</small>`;
                 barContainer.appendChild(unallocDiv);
             }
         }
