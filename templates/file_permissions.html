@@ -1,0 +1,118 @@
+{% extends "layout.html" %}
+{% block title %}Admin - File Permissions{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="margin: 0;"><i class="fas fa-shield-alt"></i> File Permissions Management</h3>
+        <span style="font-size: 0.9rem; color: #6c757d;">Registry of files in <code>shared/</code> folder</span>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>File Path</th>
+                <th>Owner</th>
+                <th>Visibility</th>
+                <th>Read</th>
+                <th>Write</th>
+                <th>Delete</th>
+                <th style="width: 150px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for fp in perms %}
+            <tr id="fp-{{ fp.id }}">
+                <td>
+                    <code style="font-size: 0.85rem;">{{ fp.rel_path }}</code>
+                </td>
+                <td>
+                    <span class="badge" style="background: #e9ecef; color: #495057;">
+                        <i class="fas fa-user"></i> {{ fp.owner.username if fp.owner else 'Unknown' }}
+                    </span>
+                </td>
+                <form action="{{ url_for('admin_edit_file_permission', fp_id=fp.id) }}" method="POST">
+                    <td>
+                        <select name="visibility" class="form-control" style="padding: 2px 5px; font-size: 0.85rem; width: auto;">
+                            <option value="shared" {% if fp.visibility == 'shared' %}selected{% endif %}>Shared</option>
+                            <option value="private" {% if fp.visibility == 'private' %}selected{% endif %}>Private</option>
+                        </select>
+                    </td>
+                    <td style="text-align: center;">
+                        <input type="checkbox" name="can_read" {% if fp.can_read %}checked{% endif %}>
+                    </td>
+                    <td style="text-align: center;">
+                        <input type="checkbox" name="can_write" {% if fp.can_write %}checked{% endif %}>
+                    </td>
+                    <td style="text-align: center;">
+                        <input type="checkbox" name="can_delete" {% if fp.can_delete %}checked{% endif %}>
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button type="submit" class="btn btn-sm" style="background: #28a745;" title="Save Changes">
+                                <i class="fas fa-save"></i>
+                            </button>
+                </form>
+                            <form action="{{ url_for('admin_delete_file_permission', fp_id=fp.id) }}" method="POST" onsubmit="return confirm('Remove this permission record? Note: This does not delete the physical file unless checked.');" style="display: inline;">
+                                <button type="button" class="btn btn-sm btn-danger" onclick="confirmPermDelete({{ fp.id }}, '{{ fp.rel_path }}')" title="Delete Record">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="7" style="text-align: center; color: #6c757d; padding: 2rem;">
+                    No files registered in the permissions system yet.<br>
+                    <small>Files appear here when uploaded to the shared folder.</small>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card" style="margin-top: 1.5rem; background: #fff3cd; border: 1px solid #ffeeba;">
+    <h4 style="color: #856404; margin-top: 0;"><i class="fas fa-info-circle"></i> How it works</h4>
+    <ul style="font-size: 0.9rem; color: #856404; margin-bottom: 0;">
+        <li><strong>Owner:</strong> The user who uploaded the file. They always have full access to their own files.</li>
+        <li><strong>Visibility:</strong> <em>Private</em> means only the owner and admins can see/access it, even if it's in a shared folder.</li>
+        <li><strong>Permissions:</strong> These flags apply to <u>other</u> users who have been approved for shared access.</li>
+        <li><strong>Audit Logs:</strong> Denied access attempts are logged to <code>nas_data/access_denied.log</code>.</li>
+    </ul>
+</div>
+
+{# Modal-like confirmation for deletion #}
+<div id="deleteModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+    <div class="card" style="max-width: 400px; width: 90%;">
+        <h4 id="deleteTitle">Delete Permission Record</h4>
+        <p id="deleteMsg">Are you sure you want to remove the permission record for this file?</p>
+        <form id="deleteForm" method="POST">
+            <div style="margin-bottom: 1rem;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #dc3545; font-weight: 600;">
+                    <input type="checkbox" name="also_delete_file" value="1"> 
+                    Also delete the physical file from NAS
+                </label>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn" onclick="document.getElementById('deleteModal').style.display='none'" style="background: #6c757d;">Cancel</button>
+                <button type="submit" class="btn btn-danger">Confirm Delete</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function confirmPermDelete(fpId, path) {
+    const modal = document.getElementById('deleteModal');
+    const form = document.getElementById('deleteForm');
+    const msg = document.getElementById('deleteMsg');
+    
+    form.action = "/admin/file-permissions/" + fpId + "/delete";
+    msg.innerHTML = "Are you sure you want to remove the permission record for:<br><code>" + path + "</code>";
+    
+    modal.style.display = 'flex';
+}
+</script>
+{% endblock %}

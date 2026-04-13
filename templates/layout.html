@@ -33,6 +33,10 @@
                     class="{{ 'active' if request.endpoint == 'admin_requests' else '' }}">
                     <i class="fas fa-envelope-open-text"></i> Shared Requests
                 </a></li>
+            <li><a href="{{ url_for('admin_file_permissions') }}"
+                    class="{{ 'active' if request.endpoint == 'admin_file_permissions' else '' }}">
+                    <i class="fas fa-shield-alt"></i> File Permissions
+                </a></li>
             {% endif %}
             <li><a href="{{ url_for('change_password') }}"
                     class="{{ 'active' if request.endpoint == 'change_password' else '' }}">

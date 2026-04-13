@@ -51,6 +51,14 @@
             </button>
         </form>
         {% endif %}
+
+        {% if session.get('role') == 'admin' %}
+        <a href="{{ url_for('admin_file_permissions') }}" class="btn btn-sm"
+            style="background:#6f42c1; color:white; margin-left:auto;"
+            title="Manage file permissions">
+            <i class="fas fa-shield-alt"></i> Permissions
+        </a>
+        {% endif %}
     </div>
 </div>
 
@@ -96,8 +104,11 @@
             <tr>
                 <th style="width: 50px;">Type</th>
                 <th>Name</th>
-                <th style="width: 100px;">Size</th>
-                <th style="width: 150px;">Actions</th>
+                <th style="width: 90px;">Size</th>
+                <th style="width: 110px;">Owner</th>
+                <th style="width: 90px;">Visibility</th>
+                <th style="width: 160px;">Permissions</th>
+                <th style="width: 160px;">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -106,7 +117,7 @@
                 <td><i class="fas fa-level-up-alt file-icon dir-icon"></i></td>
                 <td><a href="{{ url_for('files', req_path=parent_path) }}">..</a></td>
                 <td>-</td>
-                <td></td>
+                <td colspan="4"></td>
             </tr>
             {% endif %}
 
@@ -127,12 +138,77 @@
                     {% endif %}
                 </td>
                 <td>{{ file.size }}</td>
+
+                {# ── Owner ── #}
+                <td style="font-size:0.82rem; color:#6c757d;">
+                    <i class="fas fa-user" style="font-size:0.75rem;"></i>
+                    {{ file.owner }}
+                </td>
+
+                {# ── Visibility badge ── #}
                 <td>
-                    <div style="display: flex; gap: 0.25rem;">
+                    {% if file.visibility == 'private' %}
+                    <span style="display:inline-flex; align-items:center; gap:4px;
+                                 background:#f8d7da; color:#721c24;
+                                 border-radius:4px; padding:2px 7px; font-size:0.75rem; font-weight:600;">
+                        <i class="fas fa-lock" style="font-size:0.7rem;"></i> Private
+                    </span>
+                    {% else %}
+                    <span style="display:inline-flex; align-items:center; gap:4px;
+                                 background:#d4edda; color:#155724;
+                                 border-radius:4px; padding:2px 7px; font-size:0.75rem; font-weight:600;">
+                        <i class="fas fa-globe" style="font-size:0.7rem;"></i> Shared
+                    </span>
+                    {% endif %}
+                </td>
+
+                {# ── Permission icons ── #}
+                <td>
+                    <div style="display:flex; gap:5px; flex-wrap:wrap;">
+                        {% if file.can_write %}
+                        <span title="Write allowed"
+                            style="background:#cce5ff; color:#004085; border-radius:3px; padding:1px 6px; font-size:0.72rem;">
+                            <i class="fas fa-pen"></i> W
+                        </span>
+                        {% else %}
+                        <span title="Write denied"
+                            style="background:#e9ecef; color:#adb5bd; border-radius:3px; padding:1px 6px; font-size:0.72rem; text-decoration:line-through;">
+                            <i class="fas fa-pen"></i> W
+                        </span>
+                        {% endif %}
+
+                        {% if file.can_delete %}
+                        <span title="Delete allowed"
+                            style="background:#f8d7da; color:#721c24; border-radius:3px; padding:1px 6px; font-size:0.72rem;">
+                            <i class="fas fa-trash"></i> D
+                        </span>
+                        {% else %}
+                        <span title="Delete denied"
+                            style="background:#e9ecef; color:#adb5bd; border-radius:3px; padding:1px 6px; font-size:0.72rem; text-decoration:line-through;">
+                            <i class="fas fa-trash"></i> D
+                        </span>
+                        {% endif %}
+                    </div>
+                </td>
+
+                {# ── Action Buttons ── #}
+                <td>
+                    <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
+                        {# Rename — only if write permission #}
+                        {% if file.can_write %}
                         <button onclick="promptRename('{{ file.name }}')" class="btn btn-sm"
                             style="background: #17a2b8;" title="Rename">
                             <i class="fas fa-edit"></i>
                         </button>
+                        {% else %}
+                        <button class="btn btn-sm" disabled
+                            style="background:#e9ecef; color:#adb5bd; cursor:not-allowed;" title="Rename (no permission)">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        {% endif %}
+
+                        {# Delete — only if delete permission #}
+                        {% if file.can_delete %}
                         <form action="{{ url_for('file_action') }}" method="POST"
                             onsubmit="return confirm('Delete {{ file.name }}?');" style="display: inline;">
                             <input type="hidden" name="action" value="delete">
@@ -142,12 +218,27 @@
                                 <i class="fas fa-trash"></i>
                             </button>
                         </form>
+                        {% else %}
+                        <button class="btn btn-sm btn-danger" disabled
+                            style="opacity:0.4; cursor:not-allowed;" title="Delete (no permission)">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        {% endif %}
+
+                        {# Admin: quick-link to permissions panel #}
+                        {% if session.get('role') == 'admin' and file.fp_id %}
+                        <a href="{{ url_for('admin_file_permissions') }}#fp-{{ file.fp_id }}"
+                            class="btn btn-sm"
+                            style="background:#6f42c1; color:#fff;" title="Edit permissions">
+                            <i class="fas fa-shield-alt"></i>
+                        </a>
+                        {% endif %}
                     </div>
                 </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="4" style="text-align: center; color: #6c757d;">Folder is empty</td>
+                <td colspan="7" style="text-align: center; color: #6c757d;">Folder is empty</td>
             </tr>
             {% endfor %}
         </tbody>

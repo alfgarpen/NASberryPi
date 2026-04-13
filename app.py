@@ -6,8 +6,13 @@ from flask import (Flask, render_template, request, redirect,
 from config import Config
 from utils import get_disk_usage, safe_join
 from models import db, User
-from services.access_control import (get_user_root, get_user_root_rel, get_user_home_rel,
-                                     check_shared_access, ensure_path_allowed)
+from services.access_control import (
+    get_user_root, get_user_root_rel, get_user_home_rel,
+    check_shared_access, ensure_path_allowed,
+    can_user_read, can_user_write, can_user_delete,
+    register_upload, rename_permission_record, delete_permission_record,
+    log_access_denied,
+)
 from services.user_service import reset_user_password, change_user_role
 from services.initialization import ensure_storage_structure
 
@@ -226,11 +231,32 @@ def files(req_path=''):
                 is_dir = entry.is_dir()
                 size = entry.stat().st_size if not is_dir else 0
                 rel_path = os.path.relpath(entry.path, nas_root).replace('\\', '/')
+
+                # Resolve owner info from FilePermission (shared only)
+                from models import FilePermission
+                fp = FilePermission.query.filter_by(rel_path=rel_path).first()
+                if fp and fp.owner:
+                    owner_name = fp.owner.username
+                    visibility = fp.visibility
+                elif rel_path.startswith('users/'):
+                    # Derive owner from path for private home files
+                    parts = rel_path.split('/')
+                    owner_name = parts[1] if len(parts) > 1 else '?'
+                    visibility = 'private'
+                else:
+                    owner_name = '—'
+                    visibility = 'shared'
+
                 contents.append({
                     'name': entry.name,
                     'is_dir': is_dir,
                     'size': f'{size / (1024 * 1024):.2f} MB' if not is_dir else '-',
                     'path': rel_path,
+                    'owner': owner_name,
+                    'visibility': visibility,
+                    'can_write': can_user_write(user, rel_path, nas_root),
+                    'can_delete': can_user_delete(user, rel_path, nas_root),
+                    'fp_id': fp.id if fp else None,
                 })
     except PermissionError:
         flash('Permission denied accessing this directory.', 'danger')
@@ -284,6 +310,10 @@ def file_action():
         return jsonify({'status': 'error', 'message': 'Invalid path'}), 400
 
     if action == 'upload':
+        # Write permission check on destination directory
+        if not can_user_write(user, current_path, nas_root):
+            log_access_denied(user, current_path, 'upload', nas_root)
+            return jsonify({'status': 'error', 'message': 'Permission denied: cannot upload here.'}), 403
         if 'file' not in request.files:
             return jsonify({'status': 'error', 'message': 'No file part'}), 400
         file = request.files['file']
@@ -291,10 +321,17 @@ def file_action():
             return jsonify({'status': 'error', 'message': 'No selected file'}), 400
         filename = file.filename  # Use secure_filename in production
         file.save(os.path.join(full_current_dir, filename))
-        flash(f'File {filename} uploaded successfully.', 'success')
+        # Register ownership if uploading to shared/
+        file_rel = (current_path.rstrip('/') + '/' + filename).lstrip('/')
+        register_upload(user, file_rel, db.session)
+        flash(f'File "{filename}" uploaded successfully.', 'success')
         return redirect(url_for('files', req_path=current_path))
 
     elif action == 'create_folder':
+        if not can_user_write(user, current_path, nas_root):
+            log_access_denied(user, current_path, 'create_folder', nas_root)
+            flash('Permission denied: cannot create folders here.', 'danger')
+            return redirect(url_for('files', req_path=current_path))
         folder_name = request.form.get('folder_name', '').strip()
         if folder_name:
             new_folder = os.path.join(full_current_dir, folder_name)
@@ -311,9 +348,16 @@ def file_action():
         old_name = request.form.get('old_name', '').strip()
         new_name = request.form.get('new_name', '').strip()
         if old_name and new_name:
+            old_rel = (current_path.rstrip('/') + '/' + old_name).lstrip('/')
+            new_rel = (current_path.rstrip('/') + '/' + new_name).lstrip('/')
+            if not can_user_write(user, old_rel, nas_root):
+                log_access_denied(user, old_rel, 'rename', nas_root)
+                flash('Permission denied: you cannot rename this file.', 'danger')
+                return redirect(url_for('files', req_path=current_path))
             try:
                 os.rename(os.path.join(full_current_dir, old_name),
                           os.path.join(full_current_dir, new_name))
+                rename_permission_record(old_rel, new_rel, db.session)
                 flash(f'Renamed "{old_name}" to "{new_name}".', 'success')
             except Exception as e:
                 flash(f'Error renaming: {e}', 'danger')
@@ -322,12 +366,18 @@ def file_action():
     elif action == 'delete':
         item_name = request.form.get('item_name', '').strip()
         if item_name:
+            item_rel = (current_path.rstrip('/') + '/' + item_name).lstrip('/')
+            if not can_user_delete(user, item_rel, nas_root):
+                log_access_denied(user, item_rel, 'delete', nas_root)
+                flash('Permission denied: you cannot delete this file.', 'danger')
+                return redirect(url_for('files', req_path=current_path))
             item_path = os.path.join(full_current_dir, item_name)
             try:
                 if os.path.isdir(item_path):
                     shutil.rmtree(item_path)
                 else:
                     os.remove(item_path)
+                delete_permission_record(item_rel, db.session)
                 flash(f'Deleted "{item_name}".', 'success')
             except Exception as e:
                 flash(f'Error deleting: {e}', 'danger')
@@ -465,6 +515,59 @@ def shared_request_action(req_id, action):
 
     db.session.commit()
     return redirect(url_for('admin_requests'))
+
+
+# ─────────────────────────────────────────────
+# Admin – File Permissions Panel
+# ─────────────────────────────────────────────
+
+@app.route('/admin/file-permissions')
+@admin_required
+def admin_file_permissions():
+    from models import FilePermission
+    perms = (FilePermission.query
+             .order_by(FilePermission.created_at.desc())
+             .all())
+    return render_template('file_permissions.html', perms=perms)
+
+
+@app.route('/admin/file-permissions/<int:fp_id>/edit', methods=['POST'])
+@admin_required
+def admin_edit_file_permission(fp_id):
+    from models import FilePermission
+    fp = FilePermission.query.get_or_404(fp_id)
+
+    fp.visibility = request.form.get('visibility', fp.visibility)
+    fp.can_read   = 'can_read'   in request.form
+    fp.can_write  = 'can_write'  in request.form
+    fp.can_delete = 'can_delete' in request.form
+
+    db.session.commit()
+    flash(f'Permissions updated for "{fp.rel_path}".', 'success')
+    return redirect(url_for('admin_file_permissions'))
+
+
+@app.route('/admin/file-permissions/<int:fp_id>/delete', methods=['POST'])
+@admin_required
+def admin_delete_file_permission(fp_id):
+    from models import FilePermission
+    fp = FilePermission.query.get_or_404(fp_id)
+    # Remove the physical file too if requested
+    if request.form.get('also_delete_file') == '1':
+        nas_root = app.config['NAS_ROOT']
+        abs_path = safe_join(nas_root, fp.rel_path)
+        if abs_path and os.path.exists(abs_path):
+            try:
+                if os.path.isdir(abs_path):
+                    shutil.rmtree(abs_path)
+                else:
+                    os.remove(abs_path)
+            except Exception as e:
+                flash(f'Error deleting file: {e}', 'danger')
+    db.session.delete(fp)
+    db.session.commit()
+    flash('Permission record deleted.', 'success')
+    return redirect(url_for('admin_file_permissions'))
 
 
 if __name__ == '__main__':
